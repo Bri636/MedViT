@@ -13,6 +13,15 @@ import torch
 import torch.distributed as dist
 from torch import nn, einsum
 
+# my imports 
+from pydantic import BaseModel
+from typing import TypeVar, Literal, Union
+from pathlib import Path
+import json, yaml
+
+T = TypeVar('T')
+PathLike = Union[Path, str]
+
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
     window or the global series average.
@@ -284,3 +293,77 @@ def cal_flops_params_with_fvcore(model, inputs):
     params = parameter_count(model)
     print('flops(fvcore): %f M' % (flops.total()/1000**2))
     print('params(fvcore): %f M' % (params['']/1000**2))
+
+
+
+
+# NOTE: MY UTILITIES
+class BaseConfig(BaseModel):
+    """An interface to add JSON/YAML serialization to Pydantic models."""
+
+    # A name literal to correctly identify and construct nested models
+    # which have many possible options.
+    name: Literal[''] = ''
+
+    def write_json(self, path: PathLike) -> None:
+        """Write the model to a JSON file.
+
+        Parameters
+        ----------
+        path : str
+            The path to the JSON file.
+        """
+        with open(path, 'w') as fp:
+            json.dump(self.model_dump(), fp, indent=2)
+
+    @classmethod
+    def from_json(cls: type[T], path: PathLike) -> T:
+        """Load the model from a JSON file.
+
+        Parameters
+        ----------
+        path : str
+            The path to the JSON file.
+
+        Returns
+        -------
+        T
+            A specific BaseConfig instance.
+        """
+        with open(path) as fp:
+            data = json.load(fp)
+        return cls(**data)
+
+    def write_yaml(self, path: PathLike) -> None:
+        """Write the model to a YAML file.
+
+        Parameters
+        ----------
+        path : str
+            The path to the YAML file.
+        """
+        with open(path, 'w') as fp:
+            yaml.dump(
+                json.loads(self.model_dump_json()),
+                fp,
+                indent=4,
+                sort_keys=False,
+            )
+
+    @classmethod
+    def from_yaml(cls: type[T], path: PathLike) -> T:
+        """Load the model from a YAML file.
+
+        Parameters
+        ----------
+        path : PathLike
+            The path to the YAML file.
+
+        Returns
+        -------
+        T
+            A specific BaseConfig instance.
+        """
+        with open(path) as fp:
+            raw_data = yaml.safe_load(fp)
+        return cls(**raw_data)
