@@ -394,3 +394,77 @@ def load_checkpoint(model, optimizer, scheduler, path="checkpoint.pth", device="
     
     print(f"Checkpoint loaded from {path}, resuming from epoch {epoch}")
     return epoch, loss
+
+
+class GradCAM:
+    def __init__(self, model, target_layer):
+        """
+        Args:
+            model: the model used for generating Grad-CAM maps.
+            target_layer: the convolutional layer to register hooks on.
+        """
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        self.hook_handles = []
+        self._register_hooks()
+    
+    def _register_hooks(self):
+        def forward_hook(module, input, output):
+            self.activations = output.detach()
+            
+        def backward_hook(module, grad_input, grad_output):
+            self.gradients = grad_output[0].detach()
+        
+        handle_forward = self.target_layer.register_forward_hook(forward_hook)
+        handle_backward = self.target_layer.register_backward_hook(backward_hook)
+        self.hook_handles.append(handle_forward)
+        self.hook_handles.append(handle_backward)
+    
+    def remove_hooks(self):
+        for handle in self.hook_handles:
+            handle.remove()
+    
+    def __call__(self, input_tensor, target_class=None):
+        """
+        Generates Grad-CAM for the given input_tensor.
+        Args:
+            input_tensor: a batch of images (B x C x H x W).
+            target_class: (optional) target class indices (B,) to compute gradients for.
+                          If None, uses the predicted class.
+        Returns:
+            cam: Grad-CAM heatmap of shape (B x 1 x H x W)
+        """
+        self.model.zero_grad()
+        output = self.model(input_tensor)  # Forward pass
+        
+        if target_class is None:
+            target_class = output.argmax(dim=1)
+        
+        # Create one-hot vectors for the target classes.
+        one_hot = torch.zeros_like(output)
+        for i in range(output.shape[0]):
+            one_hot[i, target_class[i]] = 1
+        # Backward pass
+        output.backward(gradient=one_hot, retain_graph=True)
+        
+        # Compute the weights
+        gradients = self.gradients  # [B, C, h, w]
+        activations = self.activations  # [B, C, h, w]
+        weights = gradients.mean(dim=(-2, -1), keepdim=True)
+        
+        # Compute weighted combination of activations and apply ReLU
+        cam = torch.sum(weights * activations, dim=1, keepdim=True)
+        cam = torch.relu(cam)
+        
+        # Normalize each CAM to [0, 1]
+        B, _, H, W = cam.shape
+        cam_flat = cam.view(B, -1)
+        cam_min = cam_flat.min(dim=1, keepdim=True)[0].view(B, 1, 1, 1)
+        cam_max = cam_flat.max(dim=1, keepdim=True)[0].view(B, 1, 1, 1)
+        cam = (cam - cam_min) / (cam_max - cam_min + 1e-8)
+        
+        # Upsample to the size of the input image.
+        cam = torch.nn.functional.interpolate(cam, size=input_tensor.shape[2:], mode='bilinear', align_corners=False)
+        return cam.detach()
