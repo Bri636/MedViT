@@ -22,18 +22,19 @@ from torchsummary import summary
 from argparse import ArgumentParser
 from argparse import Namespace
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Callable
 import lightning as L
 from pydantic import Field
 from pathlib import Path
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 
-# packages
+# custom packages
 import medmnist
 from medmnist import INFO, Evaluator
 from MedViT import MedViT_small
 from utils import BaseConfig
 from lightning_model import ViTLightning, ModelConfig
+from callbacks import KNN_Evaluation_Callback
 
 # fixing some defaults
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -90,14 +91,16 @@ test_transform = transforms.Compose([
     transforms.Normalize(mean=[.5], std=[.5])
 ])
 
-def make_callbacks(train_config: TrainConfig): 
-    callbacks = []
+def make_callbacks(train_config: TrainConfig, train_dataloader, val_dataloader) -> list[Callable]: 
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=f"20M-{train_config.num_epochs}-Epochs-{train_config.batch_size}-BZ", # param-epochs-batch_size
         filename="{epoch}-{step}",
         every_n_train_steps=train_config.save_every_n
     )
+    knn_callback = KNN_Evaluation_Callback(train_dataloader, val_dataloader, k=5)
     
+    return [checkpoint_callback, knn_callback]
     
 
 def main(): 
@@ -115,11 +118,9 @@ def main():
     print(f"Getting Dataset: {train_config.data_flag} For Task: {task}")
     print("Number of channels : ", n_channels)
     print("Number of classes : ", n_classes)
-    
     # creating datasets
     train_dataset = DataClass(split='train', transform=train_transform, download=True)
     test_dataset = DataClass(split='test', transform=test_transform, download=True)   
-
     # TODO: eventually figure out how to split train into validation 
     # https://discuss.pytorch.org/t/how-to-split-dataset-into-test-and-validation-sets/33987 
     train_loader = DataLoader(dataset=train_dataset, batch_size=train_config.batch_size, shuffle=True)
@@ -132,13 +133,15 @@ def main():
     print("===================")
     print(test_dataset)
     
-    # model setup 
+    # model setup  
     model = ViTLightning(train_config.model_config)
     print(f"Starting Training With These Configurations: {train_config.model_dump()}")
     
+    callbacks = make_callbacks(train_config, train_loader_at_eval, test_loader)
     # TODO: make your callbacks for validation and configs 
-    trainer = L.Trainer()
-    trainer.fit(model=model, train_dataloaders=train_loader, 
+    trainer = L.Trainer(callbacks=callbacks)
+    trainer.fit(model=model, 
+                train_dataloaders=train_loader, 
                 val_dataloaders=train_loader_at_eval, 
                 ckpt_path=args.model_checkpoint_path)
 
