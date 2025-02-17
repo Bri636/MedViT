@@ -26,6 +26,7 @@ from typing import Literal
 import lightning as L
 from pydantic import Field
 from pathlib import Path
+from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 
 # packages
 import medmnist
@@ -36,8 +37,8 @@ from lightning_model import ViTLightning, ModelConfig
 
 # fixing some defaults
 CURRENT_DIR = Path(__file__).resolve().parent
-FASTA_FILE_PATH = CURRENT_DIR / Path('./../icor-codon-optimization/training/rjfinalfaa.faa')
-CSV_FILE_PATH = CURRENT_DIR / Path('fasta_converted_sequences.csv')
+# CHECKPOINT_PATH = CURRENT_DIR / Path('./../icor-codon-optimization/training/rjfinalfaa.faa')
+# CSV_FILE_PATH = CURRENT_DIR / Path('fasta_converted_sequences.csv')
 
 _OPTIMIZERS = Literal['adamw']
 _SCHEDULERS = Literal['linear']
@@ -48,8 +49,8 @@ _DATA_FLAGS = Literal[
 ]
 
 class LightningConfig(BaseConfig): 
-    default_root_dir: str = ''
-
+    default_root_dir: str = CURRENT_DIR + 'checkpoints/'
+    
 class TrainConfig(BaseConfig): 
     data_flag: _DATA_FLAGS = 'octmnist'
     batch_size: int = 64
@@ -60,10 +61,11 @@ class TrainConfig(BaseConfig):
     lr_scheduler: str = 'linear'
     model_config: ModelConfig = Field(default_factory=ModelConfig)
     trainer_config: ...
+    save_every_n: int = 100
 
 def parse_arguments(): 
     argparser = ArgumentParser()
-    argparser.add_argument('--model_name_or_path', 
+    argparser.add_argument('--model_checkpoint_path', 
                            type=str, 
                            default='/homes/bhsu/2024_research/med_class/MedViT/weights/MedViT_base_im1k.pth')
     argparser.add_argument('--train_config_path', 
@@ -87,6 +89,16 @@ test_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[.5], std=[.5])
 ])
+
+def make_callbacks(train_config: TrainConfig): 
+    callbacks = []
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=f"20M-{train_config.num_epochs}-Epochs-{train_config.batch_size}-BZ", # param-epochs-batch_size
+        filename="{epoch}-{step}",
+        every_n_train_steps=train_config.save_every_n
+    )
+    
+    
 
 def main(): 
     """ Setup datasets and model for training """
@@ -128,8 +140,7 @@ def main():
     trainer = L.Trainer()
     trainer.fit(model=model, train_dataloaders=train_loader, 
                 val_dataloaders=train_loader_at_eval, 
-                ckpt_path=...)
+                ckpt_path=args.model_checkpoint_path)
 
 if __name__=="__main__": 
-    
     main()
