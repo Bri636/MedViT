@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_m
 
 import medmnist
 from medmnist import INFO
-from MedViT import MedViT_small  # or MedViT_base, MedViT_large as needed
+from models.MedViT import MedViT_small  # or MedViT_base, MedViT_large as needed
 from utils import BaseConfig
 
 # ------------------------------

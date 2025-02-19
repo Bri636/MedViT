@@ -72,7 +72,7 @@ print(train_dataset)
 print("===================")
 print(test_dataset)
 
-from MedViT import MedViT_small, MedViT_base, MedViT_large
+from models.MedViT import MedViT_small, MedViT_base, MedViT_large
 
 model = MedViT_small(num_classes=n_classes).cuda()
 # model = MedViT_base(num_classes=n_classes).cuda()

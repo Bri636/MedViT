@@ -31,9 +31,9 @@ from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 # custom packages
 import medmnist
 from medmnist import INFO, Evaluator
-from MedViT import MedViT_small
+from models.MedViT import MedViT_small
 from utils import BaseConfig
-from lightning_model import ViTLightning, ModelConfig
+# from ... import ViTLightning, ModelConfig
 from callbacks import KNN_Evaluation_Callback
 
 # fixing some defaults

@@ -70,3 +70,29 @@ For any inquiries or questions regarding the code, please feel free to contact u
 
 - Omid Nejaty: [omid.nejaty@gmail.com](mailto:omid.nejaty@gmail.com)
 - Hossein Kashiani: [hkashia@clemson.edu](mailto:hkashia@clemson.edu)
+
+
+## Brian Hsu Old Dependencies Lambda: 
+```
+dependencies = [
+    "einops",
+    "timm==1.0.8",
+    "medmnist==3.0.1",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scikit-image",
+    "fvcore",
+    "tqdm",
+    "Pillow",
+    "fire",
+    "torchattacks",
+    "torch",
+    "torchvision",
+    "matplotlib", 
+    "pytorch_metric_learning", 
+    "scikit-learn", 
+    "pytorch-lightning", 
+    "lightning"
+]
+```

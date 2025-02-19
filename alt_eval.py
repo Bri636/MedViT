@@ -9,7 +9,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, classification_report
 import medmnist
 from medmnist import INFO
-from MedViT import MedViT_small  # or MedViT_base, MedViT_large as required
+from models.MedViT import MedViT_small  # or MedViT_base, MedViT_large as required
 from tqdm import tqdm
 import copy
 from utils import GradCAM

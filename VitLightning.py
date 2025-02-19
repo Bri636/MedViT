@@ -20,7 +20,9 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_m
 
 import medmnist
 from medmnist import INFO
-from MedViT import MedViT_small  # or MedViT_base, MedViT_large as needed
+
+from medmnist_datasets.medmnist_dataset import make_datasets
+from models.MedViT import MedViT_small  # or MedViT_base, MedViT_large as needed
 from utils import BaseConfig
 
 class ModelConfig(BaseConfig): 
@@ -30,52 +32,49 @@ class ModelConfig(BaseConfig):
 # Data Preparation
 # ------------------------------
 
-data_flag = 'octmnist'
-download = True
+# data_flag = 'octmnist'
+# download = True
 
-# Hyperparameters
-NUM_EPOCHS = 10
-BATCH_SIZE = 64
-lr = 0.005
+# # Hyperparameters
+# NUM_EPOCHS = 10
+# BATCH_SIZE = 64
+# lr = 0.005
 
-# Load medmnist info and dataset class
-info = INFO[data_flag]
-n_channels = info['n_channels']
-n_classes = len(info['label'])
-DataClass = getattr(medmnist, info['python_class'])
+# # Load medmnist info and dataset class
+# info = INFO[data_flag]
+# n_channels = info['n_channels']
+# n_classes = len(info['label'])
+# DataClass = getattr(medmnist, info['python_class'])
 
-print("number of channels : ", n_channels)
-print("number of classes : ", n_classes)
+# print("number of channels : ", n_channels)
+# print("number of classes : ", n_classes)
 
-# Define transforms
-train_transform = transforms.Compose([
-    transforms.Resize(224),
-    transforms.Lambda(lambda image: image.convert('RGB')),
-    torchvision.transforms.AugMix(),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[.5], std=[.5])
-])
-test_transform = transforms.Compose([
-    transforms.Resize(224),
-    transforms.Lambda(lambda image: image.convert('RGB')),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[.5], std=[.5])
-])
+# # Define transforms
+# train_transform = transforms.Compose([
+#     transforms.Resize(224),
+#     transforms.Lambda(lambda image: image.convert('RGB')),
+#     torchvision.transforms.AugMix(),
+#     transforms.ToTensor(),
+#     transforms.Normalize(mean=[.5], std=[.5])
+# ])
+# test_transform = transforms.Compose([
+#     transforms.Resize(224),
+#     transforms.Lambda(lambda image: image.convert('RGB')),
+#     transforms.ToTensor(),
+#     transforms.Normalize(mean=[.5], std=[.5])
+# ])
 
-# Create datasets and dataloaders
-train_dataset = DataClass(split='train', transform=train_transform, download=download)
-test_dataset = DataClass(split='test', transform=test_transform, download=download)
+# # Create datasets and dataloaders
+# train_dataset = DataClass(split='train', transform=train_transform, download=download)
+# test_dataset = DataClass(split='test', transform=test_transform, download=download)
 
-train_loader = data.DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-# A separate loader for evaluation over the train set (using a larger batch size)
-train_loader_at_eval = data.DataLoader(dataset=train_dataset, batch_size=2 * BATCH_SIZE, shuffle=False)
-test_loader = data.DataLoader(dataset=test_dataset, batch_size=2 * BATCH_SIZE, shuffle=False)
-
-# ------------------------------
-# Lightning Module Definition
-# ------------------------------
+# train_loader = data.DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+# # A separate loader for evaluation over the train set (using a larger batch size)
+# train_loader_at_eval = data.DataLoader(dataset=train_dataset, batch_size=2 * BATCH_SIZE, shuffle=False)
+# test_loader = data.DataLoader(dataset=test_dataset, batch_size=2 * BATCH_SIZE, shuffle=False)
 
 class LitMedViT(pl.LightningModule):
+    """ I rip off the classifier head so we can do """
     def __init__(self, n_classes, lr, pretrained_path):
         super().__init__()
         self.save_hyperparameters()  # logs hyperparameters to logger
@@ -242,18 +241,23 @@ class KNN_Evaluation_Callback(Callback):
 
 if __name__ == "__main__":
     # Set your pretrained weights path
-    pretrained_path = "./weights/MedViT_base_im1k.pth"
+    pretrained_path = "/nfs/lambda_stor_01/homes/bhsu/2024_research/MedViT/weights/MedViT_base_im1k.pth"
     print(f'Reading in weights from here: {pretrained_path}')
     # Initialize the WandB logger
     wandb_logger = WandbLogger(project="MedViT_KNN_Eval")
     
+    datasets = make_datasets()
+    train_dataloader = datasets['train']
+    val_dataloader = datasets['validation']
+    n_classes = datasets['n_classes']
     # Initialize the Lightning module
-    model = LitMedViT(n_classes=n_classes, lr=lr, pretrained_path=pretrained_path)
+    model = LitMedViT(n_classes=n_classes, lr=1e-4, pretrained_path=pretrained_path)
     
     # Create the k-NN evaluation callback.
     # Here we use a (larger-batch) training loader for evaluation and the test_loader for validation.
-    knn_callback = KNN_Evaluation_Callback(train_dataloader=train_loader_at_eval, val_dataloader=test_loader, k=5)
-    
+    knn_callback = KNN_Evaluation_Callback(train_dataloader=train_dataloader, 
+                                           val_dataloader=val_dataloader, 
+                                           k=5)
     # (Optional) Checkpoint callback to save model every 100 training steps.
     checkpoint_callback = ModelCheckpoint(
         dirpath="test_lightning_checkpoints",
@@ -265,16 +269,15 @@ if __name__ == "__main__":
     # Here we select GPU index 1 (i.e. "cuda:1") if available.
     trainer = pl.Trainer(
         strategy='ddp',
-        max_epochs=NUM_EPOCHS,
+        max_epochs=1,
         devices=[0, 1],
         logger=wandb_logger,
         callbacks=[knn_callback, checkpoint_callback],
         log_every_n_steps=10,
-        num_sanity_val_steps=0, 
-        accumulate_grad_batches=4
+        num_sanity_val_steps=0
     )
     # Start training.
     trainer.fit(model, 
-                train_dataloaders=train_loader, 
-                val_dataloaders=test_loader, 
-                ckpt_path='/homes/bhsu/2024_research/MedViT/test_lightning_checkpoints/epoch=0-step=400.ckpt')
+                train_dataloaders=train_dataloader, 
+                val_dataloaders=val_dataloader, 
+                ckpt_path='/homes/bhsu/2024_research/MedViT/models_all_checkpoints/test_lightning_checkpoints/epoch=1-step=500.ckpt')
