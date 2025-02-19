@@ -303,7 +303,7 @@ class BaseConfig(BaseModel):
 
     # A name literal to correctly identify and construct nested models
     # which have many possible options.
-    name: Literal[''] = ''
+    # name: Literal[''] = '' # NOTE: I DONT FUCKING NEED THIS
 
     def write_json(self, path: PathLike) -> None:
         """Write the model to a JSON file.
