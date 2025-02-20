@@ -110,7 +110,8 @@ dependencies = [
     "urllib3==1.26.20",
     "wandb==0.19.6",
     "yacs==0.1.8",
-    "yarl==1.18.3"
+    "yarl==1.18.3",
+    "umap-learn"
 ]
 
 

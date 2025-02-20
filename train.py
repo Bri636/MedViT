@@ -5,7 +5,7 @@ import os
 import torch
 import pprint as pp
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, ThroughputMonitor
 from pytorch_lightning.loggers import WandbLogger
 from pydantic import Field
 from pathlib import Path
@@ -36,7 +36,7 @@ class TrainConfig(BaseConfig):
     lr: float = 0.005
     batch_size: int = 64
     knn_config: KNNCallBackConfig = Field(default_factory=KNNCallBackConfig)
-    every_n_train_steps: int = 100 # eval every n batches
+    every_n_train_steps: int = 100 # save checkpoint every n batches
     log_every_n_steps: int = 100 # log every 100 steps 
     
 def parse_arguments() -> Namespace: 
@@ -56,8 +56,11 @@ def parse_arguments() -> Namespace:
                            action='store_true')
     return argparser.parse_args()
     
-# TODO: assert that checkpoint_path is same as save_checkpoint_path unless scratch 
 def main(): 
+    # args = parse_arguments()
+    # train_config = TrainConfig()
+    # train_config.write_yaml('/homes/bhsu/2024_research/MedViT/configs/lambda_train_config.yaml')
+    # breakpoint()
     args = parse_arguments()
     print(f'Reading in config from here: {args.train_config_path}')
     train_config = TrainConfig.from_yaml(args.train_config_path)
@@ -78,7 +81,9 @@ def main():
     
     knn_callback = KNN_Evaluation_Callback(train_dataloader=train_dataloader, 
                                            val_dataloader=val_dataloader, 
-                                           k=train_config.knn_config.k)
+                                           k=train_config.knn_config.k, 
+                                           log_every_n_steps=train_config.knn_config.log_every_n_steps, 
+                                           max_train_batches=train_config.knn_config.max_train_batches)
     # (Optional) Checkpoint callback to save model every 100 training steps.
     # NOTE: IMPORTANT - dirpath should match model_checkpoint_path
     assert Path('/'.join(train_config.model_checkpoint_path.split('/')[:-1]))==Path(train_config.save_checkpoint_dir), f"""
@@ -101,7 +106,7 @@ in the same directory: {train_config.save_checkpoint_dir}
         filename="{epoch}-{step}",
         every_n_train_steps=train_config.every_n_train_steps # every 100 batches
     )
-    flops_callback = FlopsLoggerCallback()
+    flops_callback = ThroughputMonitor(batch_size_fn=lambda batch: batch[0].size(0))
     
     trainer = pl.Trainer(
         strategy=train_config.strategy,

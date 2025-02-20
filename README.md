@@ -96,3 +96,22 @@ dependencies = [
     "lightning"
 ]
 ```
+
+# TODO LIST (Feb - 19th): 
+1.) Update callback so we can...PRIO
+  * T-SNE Plot ... Color by Gold Label and Shape by Predicted Label. So we will have two legends.  
+  * Round Confusion Matrix range to Nearest 10 for the top, so we do not have random cutoffs
+  * Generate ROC Score as well 
+  <!-- * Track Label - Label Wise  -->
+
+2.) Re-Factor Eval, relies on 3.)...
+
+3.) Update GradCam to constructs figure so it can...
+* Create plot with heatmap + original side-by-side
+* Title by 'Estimated Label: ___, Gold Label: ___'
+
+4.) Move to Polaris if possible --> lambda cleanup Feb 24th
+
+
+# NOTES: 
+'label': {'0': 'choroidal neovascularization', '1': 'diabetic macular edema', '2': 'drusen', '3': 'normal'}

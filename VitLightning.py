@@ -6,7 +6,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
 import wandb
-
+from lightning_fabric.utilities import measure_flops
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
@@ -54,6 +54,16 @@ class LitMedViT(pl.LightningModule):
         self.model.proj_head = nn.Identity()
         # I use sup-con loss for label informed contrastive loss 
         self.metric_loss_func = losses.SupConLoss(temperature=0.07)
+        
+    # def setup(self, stage):
+    #     with torch.device("meta"):
+    #         model = LitMedViT(4, 1e-4, '/homes/bhsu/2024_research/MedViT/weights/MedViT_base_im1k.pth')
+    #         def sample_forward():
+    #             batch = torch.randn((64, 3, 224, 224), device="meta") # B of 64 for now
+    #             return model(batch)
+    #         self.flops_per_batch = measure_flops(model, 
+    #                                              sample_forward, 
+    #                                              loss_fn=torch.Tensor.sum)
         
     def forward(self, x):
         # I use L2 normalized embeddings as suggested in original paper
