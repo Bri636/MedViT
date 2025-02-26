@@ -114,6 +114,30 @@ def make_gradcam(model_gradcam: torch.nn.Module) -> GradCAM:
     gradcam = GradCAM(model_gradcam, target_layer)
     return gradcam
 
+def make_cnn_gradcam(model_gradcam: torch.nn.Module) -> GradCAM:
+    """Deepcopies model to initialize GradCAM for eval by using the last CNN layer."""
+    model_gradcam.eval()
+    target_layer = None
+
+    # Check if the model has a 'features' attribute (e.g., MedViT)
+    if hasattr(model_gradcam, 'features'):
+        # Iterate over the feature blocks in reverse order
+        for block in reversed(model_gradcam.features):
+            # Iterate through each module within the block (in reverse)
+            for module in reversed(list(block.modules())):
+                if isinstance(module, torch.nn.Conv2d):
+                    target_layer = module
+                    break
+            if target_layer is not None:
+                break
+
+    if target_layer is None:
+        raise ValueError("Target layer for GradCAM not found. Please update the target layer accordingly.")
+
+    # Initialize GradCAM with the gradcam model and target layer.
+    gradcam = GradCAM(model_gradcam, target_layer)
+    return gradcam
+
 def unnormalize(img_tensor):
     """
     Unnormalize a tensor image using mean=0.5 and std=0.5.
@@ -334,7 +358,7 @@ def visualize_saliency(image_tensor: torch.Tensor, saliency_map: torch.Tensor, e
     
     # Set the overall title.
     fig.suptitle(f"Estimated Label: {estimated_label}, Gold Label: {gold_label}")
-    plt.savefig(f"Saliency-Image-{idx}-Gold-{gold_label}-Est-{estimated_label}.png")
+    plt.savefig(f"./images_cnn/Saliency-Image-{idx}-Gold-{gold_label}-Est-{estimated_label}.png")
     plt.show()
 
 
@@ -350,7 +374,7 @@ def parse_arguments():
 def main(): 
     args = parse_arguments()
     # eval_config = EvalConfig.from_yaml(args.eval_config)
-    batch_size = 8
+    batch_size = 24
     datasets = make_datasets('octmnist', batch_size)
     test_dataloader = datasets['test']
     n_classes = datasets['n_classes']
@@ -367,6 +391,7 @@ def main():
     knn.fit(train_embeddings, train_labels)
     
     gradcam = make_gradcam(copy.deepcopy(model))
+    # gradcam=make_cnn_gradcam(copy.deepcopy(model))
     for batch_idx, (inputs, targets) in enumerate(test_dataloader):
         inputs = inputs.to(DEVICE)
         targets = targets.to(DEVICE)
@@ -381,7 +406,7 @@ def main():
         cams = gradcam(inputs)  # Shape: [B, 1, H, W]
         sal_maps = compute_saliency_maps(model, inputs, targets)
         # Visualize the first 5 images in the batch.
-        for i in range(min(batch_size, inputs.shape[0])):
+        for i in tqdm(range(min(batch_size, inputs.shape[0])), desc='Generating Images'):
             # Compute the estimated label using the model prediction.
             estimated_label = knn_predictions[i]
             gold_label = targets[i].item()

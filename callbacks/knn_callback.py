@@ -171,7 +171,7 @@ class KNN_Evaluation_Callback(Callback):
         self.k = k
         self.log_every_n_steps = log_every_n_steps
         self.batch_count = 0
-        self.max_train_batches = max_train_batches  # Use only this many batches from train set
+        self.max_train_batches = max_train_batches 
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         self.batch_count += 1
