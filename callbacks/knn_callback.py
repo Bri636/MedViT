@@ -274,12 +274,12 @@ class KNN_Evaluation_Callback(Callback):
         # ----------------------------
         # 6) t-SNE Visualization(s)
         # ----------------------------
-        # tsne = TSNE(n_components=2, random_state=42)
-        # X_val_2d = tsne.fit_transform(X_val)
+        tsne = TSNE(n_components=2, random_state=42)
+        X_val_2d = tsne.fit_transform(X_val)
         # NOTE: CHANGE from tsne
-        print(f'UMAP Validating on X_val of Shape: {X_val.shape}')
-        umap_2d = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
-        X_val_2d = umap_2d.fit_transform(X_val)
+        print(f'TSNE Validating on X_val of Shape: {X_val.shape}')
+        # umap_2d = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
+        # X_val_2d = umap_2d.fit_transform(X_val)
 
         # -- Plot A: color by gold label with a legend
         fig_tsne1, ax_tsne1 = plt.subplots(figsize=(8, 6))
@@ -287,9 +287,9 @@ class KNN_Evaluation_Callback(Callback):
             X_val_2d[:, 0], X_val_2d[:, 1],
             c=y_val, cmap='viridis', alpha=0.7
         )
-        ax_tsne1.set_title("t-SNE (Color = Gold Label)")
-        ax_tsne1.set_xlabel("t-SNE component 1")
-        ax_tsne1.set_ylabel("t-SNE component 2")
+        ax_tsne1.set_title("TSNE Plot of OCT Image Embeddings Colored by True Label")
+        ax_tsne1.set_xlabel("TSNE Component 1")
+        ax_tsne1.set_ylabel("TSNE Component 2")
         # Instead of a colorbar, create custom legend handles:
         classes = np.unique(y_val)
         # Create a normalizer and retrieve the colormap
@@ -302,7 +302,7 @@ class KNN_Evaluation_Callback(Callback):
             for label in classes
         ]
         # Add the legend to the plot
-        ax_tsne1.legend(handles=legend_handles, title="Gold Label", loc='best')
+        ax_tsne1.legend(handles=legend_handles, title="True Label", loc='best')
 
         # -- Plot B: color by gold label, shape by predicted label
         fig_tsne2, ax_tsne2 = plt.subplots(figsize=(8, 6))
@@ -341,9 +341,9 @@ class KNN_Evaluation_Callback(Callback):
                     label=f"True={true_lb}, Pred={pred_lb}"
                 )
 
-        ax_tsne2.set_title("t-SNE (Color = Gold Label, Shape = Pred Label)")
-        ax_tsne2.set_xlabel("t-SNE component 1")
-        ax_tsne2.set_ylabel("t-SNE component 2")
+        ax_tsne2.set_title("TSNE Plot of OCT Image Embeddings Colored by True Label and Shape by Predicted Label")
+        ax_tsne2.set_xlabel("UMAP component 1")
+        ax_tsne2.set_ylabel("UMAP component 2")
 
         # Instead of a combined legend for all pairs, we can do two separate legends:
         #  - One for color
@@ -435,7 +435,7 @@ class KNN_Evaluation_Callback(Callback):
             "KNN Accuracy": acc,
             "KNN F1 Score": f1,
             "KNN AUC": auc_val,
-            "Confusion Matrix": wandb.Image(fig_cm),
+            "Confusion Matrix of OCT Labels": wandb.Image(fig_cm),
             "t-SNE (Color by Label)": wandb.Image(fig_tsne1),
             "t-SNE (Color by Label, Shape by Pred)": wandb.Image(fig_tsne2),
         }

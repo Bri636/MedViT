@@ -468,3 +468,87 @@ class GradCAM:
         # Upsample to the size of the input image.
         cam = torch.nn.functional.interpolate(cam, size=input_tensor.shape[2:], mode='bilinear', align_corners=False)
         return cam.detach()
+    
+# def compute_saliency_maps(model: torch.nn.Module, 
+#                           inputs: torch.Tensor, 
+#                           targets: torch.Tensor = None, 
+#                           normalize: bool = True) -> torch.Tensor:
+#     """
+#     Computes saliency maps for a batch of inputs.
+    
+#     Args:
+#         model: The neural network model.
+#         inputs: A batch of input images (shape: [B, C, H, W]).
+#         targets: (Optional) The target class indices. If None, uses the predicted class.
+#         normalize: If True, normalize each saliency map to [0,1].
+    
+#     Returns:
+#         A tensor of saliency maps with shape [B, H, W].
+#     """
+#     model.eval()
+#     inputs = inputs.clone().detach()
+#     inputs.requires_grad_()  # Enable gradients for the input
+
+#     # Forward pass
+#     outputs = model(inputs)  # outputs shape: [B, num_classes]
+    
+#     # If targets are not provided, use the predicted class (argmax) for each example.
+#     if targets is None:
+#         targets = outputs.argmax(dim=1)
+    
+#     # Select the scores for the target classes.
+#     target_scores = outputs.gather(1, targets.view(-1, 1)).squeeze()
+    
+#     # Sum up the target scores and compute gradients.
+#     loss = target_scores.sum()
+#     model.zero_grad()
+#     loss.backward()
+    
+#     # Get the absolute gradients with respect to the input.
+#     saliency = inputs.grad.data.abs()  # shape: [B, C, H, W]
+    
+#     # For each pixel, take the maximum across the color channels.
+#     saliency, _ = saliency.max(dim=1)  # shape: [B, H, W]
+    
+#     if normalize:
+#         # Normalize each saliency map to [0, 1]
+#         saliency_min = saliency.view(saliency.size(0), -1).min(dim=1)[0].view(-1, 1, 1)
+#         saliency_max = saliency.view(saliency.size(0), -1).max(dim=1)[0].view(-1, 1, 1)
+#         saliency = (saliency - saliency_min) / (saliency_max - saliency_min + 1e-8)
+    
+#     return saliency
+
+# def visualize_saliency(image_tensor: torch.Tensor, saliency_map: torch.Tensor, estimated_label, gold_label, idx: int):
+#     """
+#     Displays a side-by-side figure with the original image and the saliency map overlay.
+#     The figure title includes 'Estimated Label' (model prediction) and 'Gold Label' (true label).
+    
+#     Args:
+#         image_tensor: The original image tensor (C, H, W). Assumes it is normalized.
+#         saliency_map: A 2D saliency map (H, W) corresponding to the image.
+#         estimated_label: The predicted label for the image.
+#         gold_label: The true label of the image.
+#         idx: An index used for saving the file.
+#     """
+#     # Unnormalize image (assuming mean=0.5, std=0.5)
+#     image = unnormalize(image_tensor.cpu()).permute(1, 2, 0).numpy()
+    
+#     # Convert saliency map to numpy.
+#     saliency = saliency_map.cpu().numpy()
+    
+#     # Create a side-by-side plot.
+#     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+#     # Left: original image.
+#     axes[0].imshow(image)
+#     axes[0].set_title("Original Image")
+#     axes[0].axis('off')
+#     # Right: overlay saliency map.
+#     axes[1].imshow(image)
+#     axes[1].imshow(saliency, cmap='hot', alpha=0.5)
+#     axes[1].set_title("Saliency Map Overlay")
+#     axes[1].axis('off')
+    
+#     # Set the overall title.
+#     fig.suptitle(f"Estimated Label: {estimated_label}, Gold Label: {gold_label}")
+#     plt.savefig(f"./images_cnn/Saliency-Image-{idx}-Gold-{gold_label}-Est-{estimated_label}.png")
+#     plt.show()

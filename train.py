@@ -12,17 +12,17 @@ from pathlib import Path
 from argparse import ArgumentParser, Namespace
 import time
 import itertools
+from torch import nn
 # me packages 
 # callbacks
 from callbacks.knn_callback import KNNCallBackConfig, KNN_Evaluation_Callback
 from callbacks.flops_callback import FlopsLoggerCallback
-from medmnist_datasets.medmnist_dataset import make_datasets
+from medmnist_datasets.medmnist_dataset import make_dataloaders
 from utils import BaseConfig
 from VitLightning import LitMedViT
 
 CURRENT_DIR = Path(__file__).resolve().parent
-IM1K_WEIGHTS = CURRENT_DIR / Path('/weights/MedViT_base_im1k.pth')
-
+IM1K_WEIGHTS = CURRENT_DIR / Path('weights/MedViT_base_im1k.pth')
 # some defaults yeh
 class TrainConfig(BaseConfig): 
     """ Training config """
@@ -55,6 +55,29 @@ def parse_arguments() -> Namespace:
     argparser.add_argument('--debug', 
                            action='store_true')
     return argparser.parse_args()
+
+def save_as_lightning() -> None: 
+    """ Hacky Workaround for turning weights into torch lightning; from here: https://discuss.pytorch.org/t/issues-using-a-non-lightning-checkpoint-in-lightning/192518/5"""
+    from collections import OrderedDict
+    import torch
+    # Load the checkpoint
+    checkpoint_path = "/homes/bhsu/2024_research/MedViT/weights/MedViT_base_im1k.pth"
+    # checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+    checkpoint = LitMedViT()
+    # create new checkpoint
+    modified_checkpoint = OrderedDict()
+    modified_checkpoint['state_dict'] = {}
+    # prefix keys in state_dict
+    for k, v in checkpoint.items():
+        k = f'model.{k}'
+        modified_checkpoint['state_dict'][k] = v
+    # add missing keys
+    modified_checkpoint['pytorch-lightning_version'] = '0.0.0'
+    modified_checkpoint['global_step'] = None
+    modified_checkpoint['epoch'] = None
+    # save
+    modified_checkpoint_path = "/homes/bhsu/2024_research/MedViT/weights/fixed_MedViT_base_im1k.pth"
+    torch.save(modified_checkpoint, modified_checkpoint_path)
     
 def main(): 
     # args = parse_arguments()
@@ -68,7 +91,7 @@ def main():
     train_config.save_checkpoint_dir = args.save_checkpoint_dir
     
     wandb_logger = WandbLogger(project=train_config.wandb_log_proj)
-    datasets = make_datasets(train_config.data_flag, train_config.batch_size)
+    datasets = make_dataloaders(train_config.data_flag, train_config.batch_size)
     
     train_dataloader = datasets['train']
     val_dataloader = datasets['validation']
@@ -78,7 +101,7 @@ def main():
     model = LitMedViT(n_classes=n_classes, 
                       lr=train_config.lr, 
                       pretrained_path=train_config.model_checkpoint_path)
-    
+
     knn_callback = KNN_Evaluation_Callback(train_dataloader=train_dataloader, 
                                            val_dataloader=val_dataloader, 
                                            k=train_config.knn_config.k, 
@@ -86,10 +109,11 @@ def main():
                                            max_train_batches=train_config.knn_config.max_train_batches)
     # (Optional) Checkpoint callback to save model every 100 training steps.
     # NOTE: IMPORTANT - dirpath should match model_checkpoint_path
-    assert Path('/'.join(train_config.model_checkpoint_path.split('/')[:-1]))==Path(train_config.save_checkpoint_dir), f"""
-STOP: loaded checkpoint_weight_path: {train_config.model_checkpoint_path} should probably be saved 
-in the same directory: {train_config.save_checkpoint_dir}  
-"""
+    if not args.train_from_scratch: 
+        assert Path('/'.join(train_config.model_checkpoint_path.split('/')[:-1]))==Path(train_config.save_checkpoint_dir), f"""
+    STOP: loaded checkpoint_weight_path: {train_config.model_checkpoint_path} should probably be saved 
+    in the same directory: {train_config.save_checkpoint_dir}  
+    """
     print('==================================================================')
     print(f'Checkpoint loaded from here: {train_config.model_checkpoint_path}')
     print('==================================================================')
@@ -106,25 +130,23 @@ in the same directory: {train_config.save_checkpoint_dir}
         filename="{epoch}-{step}",
         every_n_train_steps=train_config.every_n_train_steps # every 100 batches
     )
-    flops_callback = ThroughputMonitor(batch_size_fn=lambda batch: batch[0].size(0))
+    # flops_callback = ThroughputMonitor(batch_size_fn=lambda batch: batch[0].size(0))
     
     trainer = pl.Trainer(
         strategy=train_config.strategy,
         max_epochs=train_config.num_epochs,
         devices='auto',
         logger=wandb_logger,
-        callbacks=[knn_callback, checkpoint_callback, flops_callback], # TODO: maybe add gradcam callbacks
+        callbacks=[knn_callback, checkpoint_callback], # TODO: maybe add gradcam callbacks
         log_every_n_steps=train_config.log_every_n_steps,
         num_sanity_val_steps=0 # avoid validation hangup 
     )
     if args.train_from_scratch: 
-        print(f'WARNING: YOU ARE TRAINING FROM SCRATCH FROM HERE: {IM1K_WEIGHTS}')
+        print(f'WARNING: YOU ARE TRAINING FROM SCRATCH FROM HERE: {IM1K_WEIGHTS}\nAND SAVING HERE: {train_config.save_checkpoint_dir}')
         time.sleep(5)
-        breakpoint()
         trainer.fit(model, 
             train_dataloaders=train_dataloader, 
-            val_dataloaders=val_dataloader, 
-            ckpt_path=IM1K_WEIGHTS) # start from this checkpoint
+            val_dataloaders=val_dataloader) # no ckpt needed; from scratch
     else: 
         trainer.fit(model, 
                 train_dataloaders=train_dataloader, 

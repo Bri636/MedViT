@@ -1,9 +1,9 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2
 
 CKPT_PATH='/homes/bhsu/2024_research/MedViT/models_all_checkpoints/test_lightning_checkpoints/epoch=1-step=500.ckpt'
-CKPT_SAVE_DIR='/homes/bhsu/2024_research/MedViT/models_all_checkpoints/lightning_checkpoints/'
+CKPT_SAVE_DIR='/homes/bhsu/2024_research/MedViT/models_all_checkpoints/final_checkpoints/'
 TRAIN_CONFIG_PATH='/homes/bhsu/2024_research/MedViT/configs/lambda_train_config.yaml'
 
 python ../train.py \
