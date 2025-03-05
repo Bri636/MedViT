@@ -56,28 +56,6 @@ def parse_arguments() -> Namespace:
                            action='store_true')
     return argparser.parse_args()
 
-def save_as_lightning() -> None: 
-    """ Hacky Workaround for turning weights into torch lightning; from here: https://discuss.pytorch.org/t/issues-using-a-non-lightning-checkpoint-in-lightning/192518/5"""
-    from collections import OrderedDict
-    import torch
-    # Load the checkpoint
-    checkpoint_path = "/homes/bhsu/2024_research/MedViT/weights/MedViT_base_im1k.pth"
-    # checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-    checkpoint = LitMedViT()
-    # create new checkpoint
-    modified_checkpoint = OrderedDict()
-    modified_checkpoint['state_dict'] = {}
-    # prefix keys in state_dict
-    for k, v in checkpoint.items():
-        k = f'model.{k}'
-        modified_checkpoint['state_dict'][k] = v
-    # add missing keys
-    modified_checkpoint['pytorch-lightning_version'] = '0.0.0'
-    modified_checkpoint['global_step'] = None
-    modified_checkpoint['epoch'] = None
-    # save
-    modified_checkpoint_path = "/homes/bhsu/2024_research/MedViT/weights/fixed_MedViT_base_im1k.pth"
-    torch.save(modified_checkpoint, modified_checkpoint_path)
     
 def main(): 
     # args = parse_arguments()

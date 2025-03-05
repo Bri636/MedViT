@@ -4,12 +4,12 @@ wandb_log_proj: MedViT_KNN_Eval
 wandb_log_offline: true
 data_flag: octmnist
 strategy: ddp
-num_epochs: 20
+num_epochs: 15
 lr: 0.005
-batch_size: 32
+batch_size: 64
 knn_config:
     k: 5
-    log_every_n_steps: 100 # num knn logs
+    log_every_n_steps: 50 # num knn logs
     max_train_batches: 200 # num batches used for validation 
-every_n_train_steps: 100 # num steps per ckpt save
-log_every_n_steps: 100 # log every n steps
+every_n_train_steps: 50 # num steps per ckpt save
+log_every_n_steps: 50 # log every n steps

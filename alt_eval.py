@@ -19,25 +19,42 @@ from typing import Tuple
 from pathlib import Path
 import itertools
 # import packages
+from VitLightning import LitMedViT
 from medmnist_datasets.medmnist_dataset import make_dataloaders, _DATA_FLAGS
 from utils import BaseConfig
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 CURRENT_DIR = Path(__file__).resolve().parent
-MODEL_CKPT_PATH = f'{CURRENT_DIR}/models_all_checkpoints/good_checkpoints/epoch10_batch1500.pth'
+# MODEL_CKPT_PATH = f'{CURRENT_DIR}/models_all_checkpoints/good_checkpoints/epoch10_batch1500.pth'
+MODEL_CKPT_PATH = f'/homes/bhsu/2024_research/MedViT/models_all_checkpoints/final_checkpoints/epoch=10-step=5200.ckpt'
 IMG_SAVE_PATH = f'{CURRENT_DIR}/images/'
 
 def forward_embedding(x: torch.Tensor) -> torch.Tensor:
     """ l2 normalize """
     return nn.functional.normalize(x, p=2, dim=1)
 
-def make_gradcam(model_gradcam: torch.nn.Module) -> GradCAM: 
-    """ make gradcam object for evaluting my model  """
+# def make_gradcam(model_gradcam: torch.nn.Module) -> GradCAM: 
+#     """ make gradcam object for evaluting my model  """
+#     model_gradcam.eval()
+#     # first convolutional layer from the patch embedding of the first block. embed has best representations
+#     if hasattr(model_gradcam, 'features') and hasattr(model_gradcam.features[0], 'patch_embed'):
+#         # Use the convolutional layer from the patch embedding of the first block.
+#         gradcam_layer = model_gradcam.features[0].patch_embed.conv
+#     return GradCAM(model_gradcam, gradcam_layer)
+def make_gradcam(model_gradcam: torch.nn.Module) -> GradCAM:
+    """Make a GradCAM object for evaluating the model.
+    
+    If the provided model is a Lightning module wrapping the backbone in `model`,
+    it uses that backbone to extract the first convolutional layer from the patch embedding.
+    """
     model_gradcam.eval()
-    # first convolutional layer from the patch embedding of the first block. embed has best representations
-    if hasattr(model_gradcam, 'features') and hasattr(model_gradcam.features[0], 'patch_embed'):
-        # Use the convolutional layer from the patch embedding of the first block.
-        gradcam_layer = model_gradcam.features[0].patch_embed.conv
+    # If the model is a Lightning module, use its internal model as the backbone.
+    backbone = model_gradcam.model if hasattr(model_gradcam, "model") else model_gradcam
+    # Check for the expected attribute structure.
+    if hasattr(backbone, "features") and hasattr(backbone.features[0], "patch_embed"):
+        gradcam_layer = backbone.features[0].patch_embed.conv
+    else:
+        raise ValueError("The model does not contain the expected 'features[0].patch_embed.conv' structure.")
     return GradCAM(model_gradcam, gradcam_layer)
 
 def unnormalize(img_tensor: torch.Tensor) -> torch.Tensor:
@@ -55,6 +72,7 @@ def get_embeddings(dataloader: data.DataLoader, model: nn.Module) -> Tuple[torch
     with torch.no_grad():
         for inputs, targets in tqdm(dataloader):
             inputs = inputs.to(DEVICE)
+            # inputs = forward_embedding(inputs)
             emb = model(inputs)
             embeddings_list.append(emb.cpu())
             labels_list.append(targets.cpu())
@@ -84,7 +102,7 @@ def visualize_gradcam(image_tensor: torch.Tensor,
     
     fig.suptitle(f"Estimated Label: {estimated_label}, Gold Label: {gold_label}")
     plt.savefig(f"GradCAM-Image-{idx}-Gold-{gold_label}-Est-{estimated_label}.png")
-    plt.show()
+    # plt.show()
 
 def parse_arguments(): 
     argparser = ArgumentParser()
@@ -101,14 +119,27 @@ def main():
     args = parse_arguments()
     dataloaders = make_dataloaders('octmnist', args.batch_size)
     train_dataloader = dataloaders['train']
-    small_num_batches = int(len(train_dataloader) * 0.2)
+    small_num_batches = int(len(train_dataloader) * 0.5)
     train_dataloader = itertools.islice(train_dataloader, small_num_batches)
     test_dataloader = dataloaders['test']
     n_classes = dataloaders['n_classes']
-    model = MedViT_small(num_classes=n_classes).to(DEVICE)
-    state_dict = torch.load(args.model_checkpoint_path, map_location=DEVICE)
-    model.load_state_dict(state_dict, strict=False)
-    model.proj_head = nn.Identity()
+    # model = MedViT_small(num_classes=n_classes).to(DEVICE)
+    # state_dict = torch.load(args.model_checkpoint_path, map_location=DEVICE)
+    # model.load_state_dict(state_dict, strict=False)
+    # model.proj_head = nn.Identity()
+    #     # Initialize the model.
+    # model = MedViT_small(num_classes=n_classes).to(DEVICE)
+    
+    # # --- Fix: Load the checkpoint correctly ---
+    # checkpoint = torch.load(args.model_checkpoint_path, map_location=DEVICE)
+    # # If the checkpoint is a Lightning checkpoint, the weights are under 'state_dict'
+    # if 'state_dict' in checkpoint:
+    #     state_dict = checkpoint['state_dict']
+    # else:
+    #     state_dict = checkpoint
+    # model.load_state_dict(state_dict, strict=False)
+    model = LitMedViT.load_from_checkpoint(checkpoint_path=args.model_checkpoint_path)
+    model = model.to(DEVICE)
     model.eval()
     
     print("Extracting train embeddings for k-NN classifier...")

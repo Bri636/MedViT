@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0,1,2
+export CUDA_VISIBLE_DEVICES=5,6,7
 
 CKPT_PATH='/homes/bhsu/2024_research/MedViT/models_all_checkpoints/test_lightning_checkpoints/epoch=1-step=500.ckpt'
 CKPT_SAVE_DIR='/homes/bhsu/2024_research/MedViT/models_all_checkpoints/final_checkpoints/'
