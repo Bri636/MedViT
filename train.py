@@ -58,10 +58,6 @@ def parse_arguments() -> Namespace:
 
     
 def main(): 
-    # args = parse_arguments()
-    # train_config = TrainConfig()
-    # train_config.write_yaml('/homes/bhsu/2024_research/MedViT/configs/lambda_train_config.yaml')
-    # breakpoint()
     args = parse_arguments()
     print(f'Reading in config from here: {args.train_config_path}')
     train_config = TrainConfig.from_yaml(args.train_config_path)

@@ -1,4 +1,3 @@
-
 import os
 import torch
 import matplotlib
@@ -7,12 +6,13 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import numpy as np
 import wandb
-
+import pdb
 from torch import Tensor, nn
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix
 from sklearn.metrics import (
@@ -36,26 +36,29 @@ class KNNCallBackConfig(BaseConfig):
     all validation data
     """
     
-def collect_embeddings(model: nn.Module, dataloader: DataLoader, max_train_batches: int) -> Tuple[list[Tensor], list[Tensor]]: 
-    """ Returns the embeddings with their labels as a tuple """
+def collect_embeddings(model: nn.Module, 
+                       dataloader: DataLoader, 
+                       max_train_batches: int) -> Tuple[np.ndarray, np.ndarray]: 
+    """ Returns stacked embeddings of shape (max_train_batches * B, embed_dim) with their labels as a tuple """
+    device = model.device
     embeddings = []
     labels = []
     with torch.no_grad(): 
-        for idx, batch in dataloader: 
+        for idx, batch in tqdm(enumerate(dataloader), 
+                               desc='Generating embeddings...', 
+                               total=len(dataloader)): 
             inputs, targets = batch
+            inputs = inputs.to(device)
             if idx >= max_train_batches: 
                 print(f'Collected {idx+1} train batches for KNN metrics callback')
                 break
             embedding= model(inputs)
-            
-            embeddings.append(embedding)
-            labels.append(targets)
-            
+            embeddings.append(embedding.cpu())
+            labels.append(targets.cpu())
     X = torch.cat(embeddings, dim=0).numpy()
     y = torch.cat(labels, dim=0).squeeze().numpy() # dataloader labels have one extra dim
         
     return X, y
-
 
 def make_roc_curve(true_values: np.ndarray, 
                    pred_values: np.ndarray, 
@@ -103,24 +106,59 @@ def make_roc_curve(true_values: np.ndarray,
 
 def make_confusion_matrix(predicted: np.ndarray, gold: np.ndarray) -> Figure:
     """ Returns a confusion matrix object """ 
-    fig_cm, ax_cm = plt.subplots(figsize=(6, 6))
-    cm = confusion_matrix(gold, predicted)
-    cax = ax_cm.matshow(cm, cmap=plt.cm.Blues, alpha=0.7)
-    cbar = fig_cm.colorbar(cax)
-    # Explicitly add ticks at 0 and cm.max() so top tick is the largest:
-    # cbar.set_ticks([0, cm.max()])
-    # cbar.set_ticklabels([0, cm.max()])
+    from sklearn.metrics import ConfusionMatrixDisplay
+    
+    fig, ax = plt.subplots(figsize=(6, 6))
+    disp = ConfusionMatrixDisplay.from_predictions(gold, predicted, cmap=plt.cm.Blues, ax=ax)
+    disp.ax_.set_xlabel('Predicted Labels')
+    disp.ax_.set_ylabel('True Labels')
+    disp.ax_.set_title('Confusion Matrix')
+    return fig
 
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax_cm.text(
-                j, i, str(cm[i, j]),
-                va='center', ha='center', fontsize=12
-            )
-    ax_cm.set_xlabel('Predicted Labels')
-    ax_cm.set_ylabel('True Labels')
-    ax_cm.set_title('Confusion Matrix')
-    return fig_cm
+def make_tsne(X_val: np.ndarray, y_val: np.ndarray, split='train') -> Figure: 
+    
+    tsne = TSNE(n_components=2, random_state=42)
+    X_val_2d = tsne.fit_transform(X_val)
+    # NOTE: CHANGE from tsne
+    print(f'TSNE Validating on X_val of Shape: {X_val.shape}')
+    # -- Plot A: color by gold label with a legend
+    fig_tsne1, ax_tsne1 = plt.subplots(figsize=(8, 6))
+    scatter1 = ax_tsne1.scatter(
+        X_val_2d[:, 0], X_val_2d[:, 1],
+        c=y_val, cmap='viridis', alpha=0.7
+    )
+    ax_tsne1.set_title(f"TSNE Plot of {split} Set OCT Embeddings\nColored by True Label")
+    ax_tsne1.set_xlabel("TSNE Component 1")
+    ax_tsne1.set_ylabel("TSNE Component 2")
+    # Instead of a colorbar, create custom legend handles:
+    classes = np.unique(y_val)
+    # Create a normalizer and retrieve the colormap
+    norm = plt.Normalize(vmin=classes.min(), vmax=classes.max())
+    cmap = plt.cm.viridis
+    # Build legend handles for each gold label
+    legend_handles = [
+        plt.Line2D([0], [0], marker='o', color='w', label=str(label),
+                markerfacecolor=cmap(norm(label)), markersize=8)
+        for label in classes
+    ]
+    # Add the legend to the plot
+    ax_tsne1.legend(handles=legend_handles, title="True Label", loc='best')
+    return fig_tsne1
+    
+    # fig_cm, ax_cm = plt.subplots(figsize=(6, 6))
+    # cm = confusion_matrix(gold, predicted)
+    # cax = ax_cm.matshow(cm, cmap=plt.cm.Blues, alpha=0.7)
+    # cbar = fig_cm.colorbar(cax)
+    # for i in range(cm.shape[0]):
+    #     for j in range(cm.shape[1]):
+    #         ax_cm.text(
+    #             j, i, str(cm[i, j]),
+    #             va='center', ha='center', fontsize=12
+    #         )
+    # ax_cm.set_xlabel('Predicted Labels')
+    # ax_cm.set_ylabel('True Labels')
+    # ax_cm.set_title('Confusion Matrix')
+    # return fig_cm
 
 class KNN_Evaluation_Callback(Callback):
     def __init__(self, 
@@ -152,9 +190,15 @@ class KNN_Evaluation_Callback(Callback):
             self.run_knn_evaluation(trainer, pl_module)
 
     def run_knn_evaluation(self, trainer, pl_module):
-        pl_module.eval()  # Set model to eval mode
+        """ Runs KNN evaluation by computing KNN + TSNE + other graphs used in section 5 """
+        import pdb
+        pl_module.eval() 
         device = pl_module.device
-
+        
+        # collect train and validation embeddings
+        X_train_test, y_train_test = collect_embeddings(pl_module, self.train_dataloader, self.max_train_batches)
+        X_val_test, y_val_test = collect_embeddings(pl_module, self.val_dataloader, self.max_train_batches)
+        
         # ----------------------------
         # 1) Collect train embeddings
         # ----------------------------
@@ -192,32 +236,31 @@ class KNN_Evaluation_Callback(Callback):
 
         X_val = torch.cat(val_embeddings, dim=0).numpy()
         y_val = torch.cat(val_labels, dim=0).squeeze().numpy()
+        
+        test_X_train = sum(X_train_test==X_train)==len(X_train_test)
+        test_y_train = sum(y_train_test==y_train)==len(y_train_test)
+        test_X_val = sum(X_val_test==X_val)==len(X_val_test)
+        test_y_val = sum(y_val_test==y_val)==len(y_val_test)
+        assert all([test_X_train, test_y_train, test_X_val, test_y_val])
+        pdb.set_trace()
 
-        # ----------------------------
-        # 3) Fit KNN and predict
-        # ----------------------------
+        # Here is where I fit the knn and get the various accuracy metrics 
         print(f'KNN Training on X_train of Shape: {X_train.shape}')
         print(f'KNN Validating on X_val of Shape: {X_val.shape}')
         knn = KNeighborsClassifier(n_neighbors=self.k)
         knn.fit(X_train, y_train)
         y_pred = knn.predict(X_val)
-
-        # ----------------------------
-        # 4) Compute metrics
-        # ----------------------------
+        
+        
         acc = accuracy_score(y_val, y_pred)
         f1 = f1_score(y_val, y_pred, average='weighted')
-
-        # Probability outputs (if possible) for ROC/AUC
         try:
             y_proba = knn.predict_proba(X_val)
             unique_labels = np.unique(y_val)
             if len(unique_labels) == 2:
-                # Binary
-                auc_val = roc_auc_score(y_val, y_proba[:, 1])
+                auc_val = roc_auc_score(y_val, y_proba[:, 1]) # if we wanted finary values binary
             else:
-                # Multi-class
-                auc_val = roc_auc_score(y_val, y_proba, multi_class='ovr')
+                auc_val = roc_auc_score(y_val, y_proba, multi_class='ovr')# Multi-class --> what I use
         except Exception:
             y_proba = None
             auc_val = float('nan')
@@ -229,9 +272,6 @@ class KNN_Evaluation_Callback(Callback):
         cm = confusion_matrix(y_val, y_pred)
         cax = ax_cm.matshow(cm, cmap=plt.cm.Blues, alpha=0.7)
         cbar = fig_cm.colorbar(cax)
-        # # Explicitly add ticks at 0 and cm.max() so top tick is the largest:
-        # cbar.set_ticks([0, cm.max()])
-        # cbar.set_ticklabels([0, cm.max()])
 
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
@@ -355,51 +395,6 @@ class KNN_Evaluation_Callback(Callback):
         # ----------------------------
         # 7) ROC Curve
         # ----------------------------
-        
-        def make_roc_curve(true_values: np.ndarray, pred_values: np.ndarray) -> Figure: 
-            """ Returns multi-class ROC curve """
-            fig_roc = None
-            if y_proba is not None:
-                fig_roc = plt.figure(figsize=(8, 6))
-                ax_roc = fig_roc.add_subplot(111)
-                if len(unique_labels) == 2:
-                    fpr, tpr, _ = roc_curve(y_val, y_proba[:, 1])                     # Binary classification
-                    ax_roc.plot(fpr, tpr, label=f"ROC (AUC = {auc_val:.3f})")
-                    ax_roc.plot([0, 1], [0, 1], 'r--')
-                    ax_roc.set_title("ROC Curve (Binary)")
-                    ax_roc.set_xlabel("False Positive Rate")
-                    ax_roc.set_ylabel("True Positive Rate")
-                    ax_roc.legend(loc='lower right')
-                else:
-                    # Multi-class: one-vs-rest approach
-                    # Binarize the labels for each class
-                    y_val_bin = label_binarize(y_val, classes=unique_labels)
-                    n_classes = y_val_bin.shape[1]
-                    fpr = dict()
-                    tpr = dict()
-                    roc_auc = dict()
-                    for i in range(n_classes):
-                        fpr[i], tpr[i], _ = roc_curve(y_val_bin[:, i], y_proba[:, i])
-                        roc_auc[i] = auc(fpr[i], tpr[i])
-                    fpr["micro"], tpr["micro"], _ = roc_curve(
-                        y_val_bin.ravel(), y_proba.ravel()
-                    ) # Micro-average
-                    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
-                    for i in range(n_classes):
-                        ax_roc.plot(fpr[i], tpr[i],
-                                    label=f"Class {unique_labels[i]} (AUC={roc_auc[i]:.3f})")
-                    ax_roc.plot(fpr["micro"], tpr["micro"],
-                                label=f"Micro-average (AUC={roc_auc['micro']:.3f})",
-                                linestyle=':', linewidth=4)
-                    ax_roc.plot([0, 1], [0, 1], 'r--')
-                    ax_roc.set_title("ROC Curve (Multi-class: One-vs-Rest)")
-                    ax_roc.set_xlabel("False Positive Rate")
-                    ax_roc.set_ylabel("True Positive Rate")
-                    ax_roc.legend(loc='lower right')
-            
-
-        
-        
         
         fig_roc = None
         if y_proba is not None:
