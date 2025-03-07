@@ -104,12 +104,24 @@ def make_roc_curve(true_values: np.ndarray,
             ax_roc.set_ylabel("True Positive Rate")
             ax_roc.legend(loc='lower right')
 
-def make_confusion_matrix(predicted: np.ndarray, gold: np.ndarray) -> Figure:
-    """ Returns a confusion matrix object """ 
-    from sklearn.metrics import ConfusionMatrixDisplay
+# def make_confusion_matrix(predicted: np.ndarray, gold: np.ndarray) -> Figure:
+#     """ Returns a confusion matrix object """ 
+#     from sklearn.metrics import ConfusionMatrixDisplay
     
+#     fig, ax = plt.subplots(figsize=(6, 6))
+#     disp = ConfusionMatrixDisplay.from_predictions(gold, predicted, cmap=plt.cm.Blues, ax=ax)
+#     disp.ax_.set_xlabel('Predicted Labels')
+#     disp.ax_.set_ylabel('True Labels')
+#     disp.ax_.set_title('Confusion Matrix')
+#     return fig
+def make_confusion_matrix(predicted: np.ndarray, gold: np.ndarray) -> Figure:
+    """ Returns a confusion matrix object """
+    from sklearn.metrics import ConfusionMatrixDisplay
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 6))
     disp = ConfusionMatrixDisplay.from_predictions(gold, predicted, cmap=plt.cm.Blues, ax=ax)
+    disp.im_.set_clim(0, 250)  # Set the color limits of the image
     disp.ax_.set_xlabel('Predicted Labels')
     disp.ax_.set_ylabel('True Labels')
     disp.ax_.set_title('Confusion Matrix')
