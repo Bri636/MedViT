@@ -29,32 +29,28 @@ class LitMedViT(pl.LightningModule):
         self.save_hyperparameters()  # logs hyperparameters to logger
         self.lr = lr
         self.n_classes = n_classes
-    
-        # TODO: lightning will override from current checkpoint; maybe route based on continue=True or somethin
         self.model = MedViT_small(num_classes=n_classes)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         state_dict = torch.load(pretrained_path, map_location=device)
         self.model.load_state_dict(state_dict, strict=False)
         # I swap classifier head; forward returns backbone embeddings.
         self.model.proj_head = nn.Identity()
-        # I use sup-con loss for label informed contrastive loss 
+        # Sup-con loss for label informed contrastive loss 
         self.metric_loss_func = losses.SupConLoss(temperature=0.07)
         
     def forward(self, x):
-        # I use L2 normalized embeddings as suggested in original paper
+        # I use L2 normalized embeddings as suggested in SupCon paper
         emb = self.model(x)
         return F.normalize(emb, p=2, dim=1)
     
     def training_step(self, batch: torch.Tensor, batch_idx: int):
         inputs, targets = batch
         embeddings = self.forward(inputs)
-        # targets need to be in 1D (in case they come in shape [B, 1])
         loss = self.metric_loss_func(embeddings, targets.squeeze())
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
     
     def validation_step(self, batch: torch.Tensor, batch_idx: int):
-        # In this example, validation_step does not compute a loss since k-NN evaluation is done in the callback.
         inputs, targets = batch
         embeddings = self.forward(inputs)
         return {"embeddings": embeddings.cpu(), 

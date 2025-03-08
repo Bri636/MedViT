@@ -180,7 +180,7 @@ def main():
 
     X_test, y_test = get_embeddings(test_dataloader, model, len(test_dataloader))
     knn_pred_test = knn.predict(X_test)
-    # plot the confusion matrix for the test set yuh
+    # plot the confusion matrix for the test set
     cm_fig = make_confusion_matrix(knn_pred_test, y_test)
     cm_fig.savefig('test_set_cm.png')
     tsne_fig = make_tsne(X_test, y_test, 'Test')
