@@ -84,7 +84,6 @@ def visualize_gradcam(image_tensor: torch.Tensor,
                       heatmap: torch.Tensor,
                       estimated_label: int,
                       gold_label: int,
-                    #   idx: int
                       ) -> Figure:
     """
     Displays a side-by-side figure with the original image and the Grad-CAM heatmap overlay.

@@ -23,7 +23,7 @@ from VitLightning import LitMedViT
 
 CURRENT_DIR = Path(__file__).resolve().parent
 IM1K_WEIGHTS = CURRENT_DIR / Path('weights/MedViT_base_im1k.pth')
-# some defaults yeh
+# some training defaults
 class TrainConfig(BaseConfig): 
     """ Training config """
     model_checkpoint_path: str = IM1K_WEIGHTS
@@ -54,6 +54,8 @@ def parse_arguments() -> Namespace:
                            action='store_true')
     argparser.add_argument('--debug', 
                            action='store_true')
+    argparser.add_argument('--log', 
+                           action='store_true')
     return argparser.parse_args()
 
     
@@ -64,7 +66,7 @@ def main():
     train_config.model_checkpoint_path = args.model_checkpoint_path # update config
     train_config.save_checkpoint_dir = args.save_checkpoint_dir
     
-    wandb_logger = WandbLogger(project=train_config.wandb_log_proj)
+    wandb_logger = WandbLogger(project=train_config.wandb_log_proj, offline=not args.log)
     datasets = make_dataloaders(train_config.data_flag, train_config.batch_size)
     
     train_dataloader = datasets['train']
@@ -104,14 +106,13 @@ def main():
         filename="{epoch}-{step}",
         every_n_train_steps=train_config.every_n_train_steps # every 100 batches
     )
-    # flops_callback = ThroughputMonitor(batch_size_fn=lambda batch: batch[0].size(0))
     
     trainer = pl.Trainer(
         strategy=train_config.strategy,
         max_epochs=train_config.num_epochs,
         devices='auto',
         logger=wandb_logger,
-        callbacks=[knn_callback, checkpoint_callback], # TODO: maybe add gradcam callbacks
+        callbacks=[knn_callback, checkpoint_callback],
         log_every_n_steps=train_config.log_every_n_steps,
         num_sanity_val_steps=0 # avoid validation hangup 
     )
