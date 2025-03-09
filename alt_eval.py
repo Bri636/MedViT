@@ -30,7 +30,7 @@ matplotlib.use('Agg')
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 CURRENT_DIR = Path(__file__).resolve().parent
-# fixed paths for stuff
+# fixed paths 
 KNN_WEIGHTS_PATH = f'{CURRENT_DIR}/weights/3_1.0_knn_train_weights'
 # MODEL_CKPT_PATH = f'{CURRENT_DIR}/models_all_checkpoints/good_checkpoints/epoch10_batch1500.pth'
 MODEL_CKPT_PATH = f'/homes/bhsu/2024_research/MedViT/models_all_checkpoints/final_checkpoints/epoch=10-step=5200.ckpt'
@@ -44,22 +44,16 @@ def make_gradcam(model_gradcam: torch.nn.Module) -> GradCAM:
     """
     # NOTE: this should be a lightning model
     model_gradcam.eval()
-    backbone = model_gradcam.model if hasattr(
-        model_gradcam, "model") else model_gradcam
-    # Check for the expected attribute structure.
-    if hasattr(backbone, "features") and hasattr(backbone.features[0], "patch_embed"):
-        gradcam_layer = backbone.features[0].patch_embed.conv
-    else:
-        raise ValueError(
-            "The model does not contain the expected 'features[0].patch_embed.conv' structure.")
+    backbone = model_gradcam.model if hasattr(model_gradcam, "model") else model_gradcam
+    gradcam_layer = backbone.features[0].patch_embed.conv
     return GradCAM(model_gradcam, gradcam_layer)
 
-def unnormalize(img_tensor: torch.Tensor) -> torch.Tensor:
+def unnormalize(img: torch.Tensor) -> torch.Tensor:
     """
     Unnormalize a tensor image using mean=0.5 and std=0.5.
-    Assumes img_tensor shape is (C, H, W).
+    Assumes img shape is (C, H, W).
     """
-    return img_tensor * 0.5 + 0.5
+    return img * 0.5 + 0.5
 
 def get_embeddings(dataloader: data.DataLoader, model: nn.Module, num_batches: int) -> Tuple[np.ndarray, np.ndarray]:
     """ Extract embeddings and labels """
@@ -80,7 +74,7 @@ def get_embeddings(dataloader: data.DataLoader, model: nn.Module, num_batches: i
     labels = torch.cat(labels_list, dim=0).squeeze().numpy()
     return embeddings, labels
 
-def visualize_gradcam(image_tensor: torch.Tensor,
+def visualize_gradcam(image: torch.Tensor,
                       heatmap: torch.Tensor,
                       estimated_label: int,
                       gold_label: int,
@@ -89,7 +83,7 @@ def visualize_gradcam(image_tensor: torch.Tensor,
     Displays a side-by-side figure with the original image and the Grad-CAM heatmap overlay.
     The figure title includes 'Estimated Label' (model prediction) and 'Gold Label' (true label).
     """
-    image = unnormalize(image_tensor).permute(1, 2, 0).cpu().numpy()
+    image = (image * 0.5 + 0.5).permute(1, 2, 0).cpu().numpy()
     cam = heatmap.squeeze().cpu().numpy()
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     axes[0].imshow(image)
@@ -148,9 +142,7 @@ def main():
     train_dataloader = dataloaders['train']
     small_num_batches = int(len(train_dataloader) * args.train_ratio)
     train_dataloader = itertools.islice(train_dataloader, small_num_batches)
-
     test_dataloader = dataloaders['test']
-    n_classes = dataloaders['n_classes']
 
     model = LitMedViT.load_from_checkpoint(
         checkpoint_path=args.model_checkpoint_path)
@@ -188,14 +180,11 @@ def main():
     accuracy = accuracy_score(y_test, knn_pred_test)
     f1 = f1_score(y_test, knn_pred_test, average='weighted')
     prob_estimates = knn.predict_proba(X_test)
-    if n_classes == 2:
-        auc = roc_auc_score(y_test, prob_estimates[:, 1])
-    else:
-        auc = roc_auc_score(y_test, prob_estimates, multi_class='ovr')
+    auc = roc_auc_score(y_test, prob_estimates, multi_class='ovr')
 
     print("===================================")
     print("k-NN Evaluation on Test Set:")
-    print(f"Accuracy: {accuracy*100:.2f}%")
+    print(f"Accuracy: {accuracy * 100:.2f}%")
     print(f"F1 Score: {f1:.4f}")
     print(f"AUC: {auc:.4f}")
     print("===================================")
